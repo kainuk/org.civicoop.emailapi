@@ -106,23 +106,27 @@ function civicrm_api3_email_send($params) {
   }
 
   $returnValues = array();
+
+  $details = array();
+
+  // get tokens to be replaced
+  $tokens = array_merge_recursive(CRM_Utils_Token::getTokens($body_text),
+    CRM_Utils_Token::getTokens($body_html),
+    CRM_Utils_Token::getTokens($body_subject));
+
+  if (!empty($tokens)) {
+    list($details) = CRM_Utils_Token::getTokenDetails(
+      $contactIds,
+      null,
+      NULL, NULL, FALSE,
+      $tokens,
+      'CRM_Activity_BAO_Activity'
+    );
+  }
+
   foreach($contactIds as $contactId) {
-    $contact_params = array(array('contact_id', '=', $contactId, 0, 0));
-    list($contact, $_) = CRM_Contact_BAO_Query::apiQuery($contact_params);
 
-    //CRM-4524
-    $contact = reset($contact);
-
-    if (!$contact || is_a($contact, 'CRM_Core_Error')) {
-      throw new API_Exception('Could not find contact with ID: ' . $contact_params['contact_id']);
-    }
-
-    //CRM-5734
-
-    // get tokens to be replaced
-    $tokens = array_merge_recursive(CRM_Utils_Token::getTokens($body_text),
-        CRM_Utils_Token::getTokens($body_html),
-        CRM_Utils_Token::getTokens($body_subject));
+    $contact = $details[$contactId];
 
     if ($case_id) {
       $contact['case.id'] = $case_id;
@@ -175,17 +179,10 @@ function civicrm_api3_email_send($params) {
             // Do nothing
           }
         }
-
+        $$bodyType = CRM_Utils_Token::replaceContactTokens($$bodyType, $contact, FALSE, $tokens, FALSE, TRUE);
+        $$bodyType = CRM_Utils_Token::replaceComponentTokens($$bodyType, $contact, $tokens, TRUE);
         $$bodyType = CRM_Utils_Token::replaceDomainTokens($$bodyType, $domain, TRUE, $tokens, TRUE);
         $$bodyType = CRM_Utils_Token::replaceHookTokens($$bodyType, $contact, $categories, TRUE);
-        foreach ($tokens as $type => $tokenValue) {
-          CRM_Utils_Token::replaceGreetingTokens($$bodyType, $contact, $contact['contact_id']);
-          foreach ($tokenValue as $var) {
-            $$bodyType = CRM_Utils_Token::replaceContactTokens($$bodyType, $contact, FALSE, $tokens, FALSE, TRUE);
-            $contactKey = NULL;
-            $$bodyType = CRM_Utils_Token::replaceComponentTokens($$bodyType, $contact, $tokens, TRUE);
-          }
-        }
       }
     }
     $html = $body_html;
